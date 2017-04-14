@@ -1,0 +1,81 @@
+#!/usr/bin/env python
+
+import click
+import json
+import sys
+
+from termcolor import colored
+from yts_api import api_list_movies
+from yts_api import api_movie_detail
+
+
+class List(object):
+	@click.command(help='List movies provided by YTS')
+	@click.option('-l', '--limit', default=20, help='Limit the results per page')
+	@click.option('-p', '--page', default=1, help='Select which page of movies')
+	@click.option('-q', '--query-term', default='0', help='Match movie on title, actor name, or director name')
+	@click.option('-g', '--genre', default='All', help='Filter by a given genre')
+	@click.option('-s', '--sort-by', default='date_added', 
+		type=click.Choice(['trending', 'popularity', 'date_added', 'year', 'rating', 'download_count', 'like_count']),
+		help='Limit the results per page'
+	)
+	@click.option('-o', '--order-by', default='desc', type=click.Choice(['desc', 'asc']), 
+		help='Limit the results per page'
+	)
+	@click.option('-r', '--with-rt-ratings', is_flag=True, default=False, help='Return with Rotten Tomatoes rating')
+	@click.option('-j', '--json-output', is_flag=True, help='Print return output in JSON')
+	def list_movies(limit, page, query_term, genre, sort_by, order_by, with_rt_ratings, json_output):
+		response_json = api_list_movies(limit, page, query_term, genre, sort_by, order_by, with_rt_ratings)
+
+		if response_json["status_code"] != 200:
+			print '\nStatus code: {}'.format(colored(response_json["status_code"], 'red'))
+			sys.exit()
+
+		print '------------------+'
+		print 'Status code: {}  |'.format(colored(response_json["status_code"], 'green'))
+		parsed_json = json.loads(response_json["content"])
+
+		if json_output:
+			for movie in parsed_json["data"]["movies"]:
+				del movie["synopsis"]
+
+			print json.dumps(parsed_json["data"]["movies"], indent=4, sort_keys=True)
+			sys.exit()
+
+		movie_format = '{}\nRating: {} Runtime: {} Genre: {}\nDate uploaded: {}\n\nTorrents:\n'
+		torrent_format = '\tDate uploaded: {}\n\tPeers: {}\n\tQuality: {}\n\tSize: {}\n\tURL: {}\n'
+
+		print '-' * 18 + '+' + '-' * 81
+
+		for movie in parsed_json["data"]["movies"]:
+			print movie_format.format(colored(movie["title_long"], attrs=['bold']), movie["mpa_rating"], movie["runtime"],
+				','.join(movie["genres"]), movie["date_uploaded"]
+			)
+
+			for torrent in movie["torrents"]:
+				print torrent_format.format(torrent["date_uploaded"], torrent["peers"], torrent["quality"], 
+					torrent["size"], torrent["url"]
+				)
+
+			print '-' * 100
+			print ''
+
+
+class Movie(object):
+
+	@click.command(help='Get details for a specific movie')
+	def movie():
+		pass
+
+
+@click.group()
+def main():
+	pass
+
+
+main.add_command(List().list_movies, name='list-movies')
+main.add_command(Movie().movie, name='get-detail')
+
+
+if __name__ == '__main__':
+	main()
